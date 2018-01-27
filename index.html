@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js" charset="utf-8"></script>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.0/backbone-min.js" charset="utf-8"></script>
+        <style>
+
+        html, body {
+            font-family: monospace;
+            color: #333;
+        }
+
+        .container {
+            position: relative;
+        }
+
+        #controls {
+            position: absolute;
+            top: 0;
+            padding: 25px 25px 25px 25px;
+            opacity: 0.5;
+            transition: opacity 0.1s;
+        }
+
+        #controls:hover {
+            opacity: 1;
+        }
+
+        .control {
+            display: inline-block;
+            position: relative;
+        }
+
+        .control input {
+            width: 75px;
+        }
+
+        .control .label {
+            text-transform: uppercase;
+            font-size: 10px;
+            color: #555;
+            position: absolute;
+            bottom: 100%;
+            text-shadow: -2px -2px 1px #fff,
+                        -2px -1px 1px #fff,
+                        -2px 0px 1px #fff,
+                        -2px 1px 1px #fff,
+                        -2px 2px 1px #fff,
+                        -1px -2px 1px #fff,
+                        -1px -1px 1px #fff,
+                        -1px 0px 1px #fff,
+                        -1px 1px 1px #fff,
+                        -1px 2px 1px #fff,
+                        0px -2px 1px #fff,
+                        0px -1px 1px #fff,
+                        0px 1px 1px #fff,
+                        0px 2px 1px #fff,
+                        1px -2px 1px #fff,
+                        1px -1px 1px #fff,
+                        1px 0px 1px #fff,
+                        1px 1px 1px #fff,
+                        1px 2px 1px #fff,
+                        2px -2px 1px #fff,
+                        2px -1px 1px #fff,
+                        2px 0px 1px #fff,
+                        2px 1px 1px #fff,
+                        2px 2px 1px #fff;
+        }
+
+        </style>
+    </head>
+<body>
+
+<div class="container">
+    <div id="controls">
+        <div class="control">
+            <span class="label">Distance</span>
+            <input id="distance" type="number" value="1.11"  min="0" max="5">
+        </div>
+        <div class="control">
+            <span class="label">Tilt</span>
+            <input id="tilt" type="number" value="21.7" min="0" max="100">
+        </div>
+        <div class="control">
+            <span class="label">Scale</span>
+            <input id="scale" type="number" value="5500">
+        </div>
+        <div class="control">
+            <span class="label">Yaw</span>
+            <input id="yaw" type="number" value="-37" >
+        </div>
+        <div class="control">
+            <span class="label">Pitch</span>
+            <input id="pitch" type="number" value="-25">
+        </div>
+        <div class="control">
+            <span class="label">Roll</span>
+            <input id="roll" type="number" value="-3">
+        </div>
+        <div class="control">
+            <span class="label">cX</span>
+            <input id="cx" type="number" value="1.15">
+        </div>
+        <div class="control">
+            <span class="label">cY</span>
+            <input id="cy" type="number" value="10.2">
+        </div>
+    </div>
+    <canvas id="map"></canvas>
+</div>
+
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+    <script src="https://unpkg.com/topojson@3"></script>
+    <script src="versor.js"></script>
+    <script src="when/2.6.0/when.js" charset="utf-8"></script>
+    <script src="micro.js" charset="utf-8"></script>
+    <script src="globes.js" charset="utf-8"></script>
+    <script src="products.js" charset="utf-8"></script>
+    <!-- <script src="earth.js" charset="utf-8"></script> -->
+    <script>
+
+        var width = 960,
+            height = 960,
+            drawMap = function() {}
+    
+        var canvas = d3.select('canvas#map')
+            .attr('width', width)
+            .attr('height', height);
+    
+        canvas.call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged));
+    
+        var context = canvas.node().getContext('2d');
+    
+        var projection = d3.geoSatellite()
+            .precision(.1);
+    
+        var controls = d3.select('#controls');
+    
+        controls.selectAll('input').on('change', updateProjection);
+    
+        var graticule = d3.geoGraticule().step([3, 3]);
+    
+        var path = d3.geoPath()
+            .projection(projection)
+            .pointRadius(2)
+            .context(context);
+    
+        function dragstarted() {
+            v0 = versor.cartesian(projection.invert(d3.mouse(this)));
+            r0 = projection.rotate();
+            q0 = versor(r0);
+        }
+    
+        function dragged() {
+            var v1 = versor.cartesian(projection.rotate(r0).invert(d3.mouse(this))),
+                q1 = versor.multiply(q0, versor.delta(v0, v1)),
+                r1 = versor.rotation(q1);
+                projection.rotate(r1);
+        
+            drawMap();
+        }
+    
+        d3.json('topo.json', function (error, topo) {
+            if (error) throw error;
+    
+            var states = topojson.feature(topo, topo.objects.states),
+                urbanAreas = topojson.feature(topo, topo.objects['urban-areas']),
+                populatedPlaces = topojson.feature(topo, topo.objects['populated-places']);
+    
+            drawMap = function() {
+                context.clearRect(0, 0, width, height);
+    
+                // Graticule
+                context.save();
+                context.beginPath();
+                path(graticule());
+                context.strokeStyle = '#777';
+                context.stroke();
+                context.restore();
+    
+                // States
+                context.save();
+                context.globalAlpha = 0.8;
+                context.beginPath();
+                path(states);
+                context.strokeStyle = '#555';
+                context.fillStyle = '#eee';
+                context.stroke();
+                context.fill();
+                context.restore();
+    
+                // // Urban areas
+                context.save();
+                context.beginPath();
+                context.globalAlpha = 0.8;
+                path(urbanAreas);
+                context.fillStyle = '#999';
+                context.fill();
+    
+                // Populated Places
+                context.save();        
+                context.beginPath();
+                path(populatedPlaces);
+                context.strokeStyle = 'darkred';
+                context.stroke();
+                context.restore();
+    
+                context.save();
+                context.font = '9px monospace';
+                context.textAlign = 'center';
+                context.fillStyle = '#333';
+                context.shadowColor = '#fff';
+                context.shadowBlur = 2;
+                populatedPlaces.features.forEach(function(place) {
+                    var p = projection(place.geometry.coordinates);
+                    context.fillText(place.properties.NAME, p[0], p[1] - 7);
+                });
+                context.restore();
+            };
+    
+            updateProjection();
+        });
+    
+        function updateProjection() {
+            projection
+                .distance(controls.select('#distance').node().value)
+                .tilt(controls.select('#tilt').node().value)
+                .scale(controls.select('#scale').node().value)
+                .rotate([
+                    controls.select('#yaw').node().value,
+                    controls.select('#pitch').node().value,
+                    controls.select('#roll').node().value
+                ])
+                .center([
+                    controls.select('#cx').node().value,
+                    controls.select('#cy').node().value
+                ])
+                .clipAngle(Math.acos(1 / controls.select('#distance').node().value) * 180 / Math.PI - 1e-6);
+            drawMap();
+        }
+    
+    </script>
+</body>
+</html>
